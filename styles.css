@@ -179,7 +179,7 @@ tbody tr:hover{background:var(--card-2)}
 .stat small{color:var(--muted);font-size:.8rem}
 .stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .q-item{border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px;background:var(--card-2)}
-.opt-row{display:grid;grid-template-columns:26px 1fr 1fr 34px;gap:8px;align-items:center;margin-bottom:8px}
+.opt-row{display:grid;grid-template-columns:24px 1fr 40px;gap:10px;align-items:center;margin-bottom:8px}
 .opt-row input[type=radio]{width:18px;height:18px;accent-color:var(--accent)}
 
 /* ---------- modal ---------- */
