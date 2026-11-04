@@ -597,7 +597,8 @@ function adminCourseEdit(){
       <button class="btn ghost sm" data-action="add-option" data-qi="${qi}">+ Option</button>
     </div>`).join('');
     
-  const currentFile=state.editor.existingFileId?`<p class="muted" style="font-size:.83rem">Current file: ${esc(state.editor.existingFileName||'')}</p>`:'';
+    const currentFile = (state.editor.existingFileId || state.editor.newFile) 
+    ? `<p class="muted" style="font-size:.83rem">Current file: ${esc(state.editor.existingFileName || '')}</p>`: '';
   
   return `<div class="spread"><h2 style="margin:0">${isNew?'New course':'Edit course'}</h2>
     <button class="btn ghost sm" data-action="admin-tab" data-tab="courses">← Back</button></div>
@@ -796,7 +797,10 @@ document.addEventListener('click',async e=>{
   if(action==='delete-course'){
     if(!confirm('Delete this course and its file?')) return;
     const c=state.courses.find(x=>x.id===el.dataset.id);
-    if(c&&c.fileId) delete state.serverFiles[c.fileId];
+    if(c&&c.fileId) {
+      delete state.serverFiles[c.fileId];
+      await idbDel('files', c.fileId); // <--- ADD THIS LINE
+    }
     await idbDel('courses',el.dataset.id);
     await refreshData();toast('Deleted');await viewAdmin();return;
   }
@@ -926,10 +930,19 @@ document.addEventListener('submit',async e=>{
     const c=state.editor.course;
     if(!c.title.trim()){toast('Course Title is required');return;}
     if(state.editor.newFile){
-      const file=state.editor.newFile;const fileId=uid();
-      state.serverFiles[fileId]={name:file.name,data:await blobToDataURL(file)};
-      c.fileId=fileId;c.fileName=file.name;c.fileSize=file.size;
-      state.editor.newFile=null;
+      const file=state.editor.newFile;
+      const fileId=uid();
+      
+      // 1. Save to IndexedDB so it persists permanently in this browser
+      await idbPut('files', { id: fileId, name: file.name, blob: file, size: file.size, type: file.type });
+      
+      // 2. Save to memory so it gets included in content.json when publishing
+      state.serverFiles[fileId] = { name: file.name, data: await blobToDataURL(file) };
+      
+      c.fileId = fileId;
+      c.fileName = file.name;
+      c.fileSize = file.size;
+      state.editor.newFile = null;
     }
     c.deadline=c.deadline?c.deadline:'';
     
