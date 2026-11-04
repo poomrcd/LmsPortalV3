@@ -1,7 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "cleanUrls": true,
-  "trailingSlash": false,
+  "proxy": {
+    "entrypoint": "proxy.ts",
+    "matcher": "/((?!_next/static|_next/image|favicon.ico).*)"
+  },
   "headers": [
     {
       "source": "/(.*)",
