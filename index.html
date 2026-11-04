@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>LMS Portal</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar" id="topbar" hidden>
+  <div class="brand">LMS&nbsp;Portal</div>
+  <div class="topbar-actions">
+    <span class="who" id="whoami"></span>
+    <button class="icon-btn" id="btnLang" title="Language">EN</button>
+    <button class="icon-btn" id="btnTheme" title="Theme">☾</button>
+    <button class="btn ghost sm" id="btnLogout">Log out</button>
+  </div>
+</header>
+<main id="app"></main>
+<div id="loading" class="loading-overlay" hidden><div class="spinner"></div></div>
+<div id="modalRoot"></div>
+<div id="toast" class="toast" hidden></div>
+<div id="printRoot"></div>
+<script src="app.js"></script>
+</body>
+</html>
