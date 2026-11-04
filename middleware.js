@@ -1,42 +1,141 @@
 import { NextResponse } from 'next/server';
 
-export function middleware(req) {
-  const { pathname, searchParams } = req.nextUrl;
+/**
+ * LMS Portal v3 — Edge Middleware password gate
+ * Reads LMS_PASSWORD and LMS_TOKEN from Vercel Environment Variables.
+ *
+ * Setup:
+ *   Vercel → Project → Settings → Environment Variables
+ *     LMS_PASSWORD = <your access password>
+ *     LMS_TOKEN    = <long random secret, e.g. 32+ chars>
+ *   Then redeploy.
+ */
+const COOKIE_NAME = 'lms_auth';
+const COOKIE_TTL  = 60 * 60 * 24 * 30; // 30 days
 
-  // 1. Allow access if the correct auth cookie is present
-  const cookie = req.cookies.get('lms_auth')?.value;
-  if (cookie === process.env.LMS_TOKEN) {
+export async function middleware(req) {
+  const LMS_PASSWORD = process.env.LMS_PASSWORD;
+  const LMS_TOKEN    = process.env.LMS_TOKEN;
+
+  // Safety check — misconfigured deploy returns a clear message
+  if (!LMS_PASSWORD || !LMS_TOKEN) {
+    return htmlResponse(
+      `<h1 style="font-family:sans-serif;padding:40px">LMS misconfigured</h1>
+       <p style="font-family:sans-serif;padding:0 40px;color:#B3453C">
+         Set <code>LMS_PASSWORD</code> and <code>LMS_TOKEN</code> in Vercel → Settings → Environment Variables, then redeploy.
+       </p>`,
+      500
+    );
+  }
+
+  const { pathname } = req.nextUrl;
+  const cookie = req.cookies.get(COOKIE_NAME)?.value;
+
+  // 1. Already authenticated → pass through
+  if (cookie === LMS_TOKEN) {
     return NextResponse.next();
   }
 
-  // 2. Handle the login attempt via a query parameter (e.g., /?pw=yourpassword)
-  const passwordAttempt = searchParams.get('pw');
-  if (passwordAttempt === process.env.LMS_PASSWORD) {
-    // If password is correct, set the cookie and redirect to the clean root URL
-    const response = NextResponse.redirect(new URL('/', req.url));
-    response.cookies.set('lms_auth', process.env.LMS_TOKEN, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: '/',
-    });
-    return response;
+  // 2. Handle login form POST to /auth
+  if (req.method === 'POST' && pathname === '/auth') {
+    try {
+      const form = await req.formData();
+      const pw = String(form.get('pw') || '');
+      if (pw === LMS_PASSWORD) return setAuthAndRedirect(req, LMS_TOKEN);
+      return htmlResponse(loginPage('Incorrect password. Try again.'), 401);
+    } catch {
+      return htmlResponse(loginPage('Invalid request.'), 400);
+    }
   }
 
-  // 3. If no cookie and no valid password, block access
-  return new NextResponse('Not authorised', { status: 401 });
+  // 3. Backup: allow ?pw=… in URL
+  const pwParam = req.nextUrl.searchParams.get('pw');
+  if (pwParam && pwParam === LMS_PASSWORD) return setAuthAndRedirect(req, LMS_TOKEN);
+  if (pwParam) return htmlResponse(loginPage('Incorrect password. Try again.'), 401);
+
+  // 4. Not authenticated → show login page
+  return htmlResponse(loginPage(), 401);
 }
 
-// 4. Apply middleware to all paths except static assets and the login attempt itself
+function setAuthAndRedirect(req, LMS_TOKEN) {
+  const res = NextResponse.redirect(new URL('/', req.url), 303);
+  res.cookies.set(COOKIE_NAME, LMS_TOKEN, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    maxAge: COOKIE_TTL,
+    path: '/',
+  });
+  return res;
+}
+
+function htmlResponse(body, status) {
+  return new NextResponse(body, {
+    status,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  });
+}
+
+function loginPage(error = '') {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LMS Portal — Sign in</title>
+<style>
+  :root { --navy:#0B1F3A; --pearl:#FAF9F6; --muted:rgba(11,31,58,.62); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: var(--pearl); color: var(--navy); padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 400px; background: #fff; padding: 32px;
+    border-radius: 14px; border: 1px solid rgba(11,31,58,.18);
+    box-shadow: 0 6px 24px rgba(11,31,58,.10);
+  }
+  h1 { margin: 0 0 4px; font-size: 1.5rem; }
+  .sub { margin: 0 0 22px; font-size: .9rem; color: var(--muted); }
+  label { display: block; font-size: .82rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  input[type=password] {
+    width: 100%; font: inherit; font-size: .95rem; padding: 11px 13px;
+    border: 1.5px solid rgba(11,31,58,.18); border-radius: 10px;
+    background: #F4F2ED; color: var(--navy); outline: none;
+    transition: border-color .15s;
+  }
+  input[type=password]:focus { border-color: var(--navy); }
+  button {
+    width: 100%; margin-top: 16px; padding: 11px;
+    font: inherit; font-weight: 600; font-size: .95rem;
+    background: var(--navy); color: var(--pearl); border: 0;
+    border-radius: 10px; cursor: pointer; transition: opacity .15s;
+  }
+  button:hover { opacity: .9; }
+  .err {
+    margin-top: 12px; padding: 10px 12px; font-size: .85rem;
+    color: #B3453C; border: 1.5px solid #B3453C;
+    border-radius: 8px; text-align: center;
+  }
+</style>
+</head>
+<body>
+  <form class="card" method="POST" action="/auth">
+    <h1>LMS Portal</h1>
+    <p class="sub">Internal learning platform — sign in to continue</p>
+    <label for="pw">Access password</label>
+    <input id="pw" name="pw" type="password" required autofocus autocomplete="current-password">
+    <button type="submit">Sign in</button>
+    ${error ? `<div class="err">${error}</div>` : ''}
+  </form>
+</body>
+</html>`;
+}
+
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
