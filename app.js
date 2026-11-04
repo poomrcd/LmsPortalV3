@@ -970,12 +970,32 @@ window.addEventListener('beforeunload',()=>{flushCourseTime();closeAttendance();
     applyTheme();
     await loadSettings();
     if(!localStorage.getItem('lms_theme')){state.theme=state.settings.theme||'light';applyTheme();}
+    
+    // 1. Fetch content.json first
     await loadServerContent();
-    await refreshData();
+    
+    // 2. Restore session BEFORE refreshing data
     const sess=JSON.parse(localStorage.getItem('lms_session')||'null');
-    if(sess&&sess.isAdmin){state.isAdmin=true;state.adminTab='dashboard';await go('admin');}
-    else if(sess&&sess.user){state.user=sess.user;await ensureAttendanceRecord();await go('home');}
-    else await go('login');
+    if(sess&&sess.isAdmin) {
+      state.isAdmin=true;
+      state.adminTab='dashboard';
+    } else if(sess&&sess.user) {
+      state.user=sess.user;
+    }
+
+    // 3. Now refresh data (it knows if you are Admin, so it reads from the correct database)
+    await refreshData();
+
+    // 4. Route to the correct view
+    if(state.isAdmin) {
+      await go('admin');
+    } else if(state.user) {
+      await ensureAttendanceRecord();
+      await go('home');
+    } else {
+      await go('login');
+    }
+    
     updateChrome();
   }catch(err){
     console.error(err);
